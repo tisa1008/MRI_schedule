@@ -1,0 +1,2457 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MRI排班系統</title>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-enter { animation: slideIn 0.3s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-emerald-50 text-emerald-900">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useRef, useEffect } = React;
+
+    const VERSION_PREFIX = 'v1.4';
+    const GAS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw3iLwgIA8EwN9RqRCT12D1Q-YlqBnyOo0T6u9fLDBWa6b2iz03Fs3nmmGs0ifQKt0M/exec';
+    const CLOUD_GROUP = 'MRI';
+    const META_GROUP = 'MRI_META';
+    const META_DATE = '1970-01-01';
+
+    const Icon = ({ path, className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        className={className}>
+        {path}
+      </svg>
+    );
+
+    const Icons = {
+      RotateCcw: (props) => <Icon {...props} path={<><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></>} />,
+      Redo: (props) => <Icon {...props} path={<><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>} />,
+      FileSpreadsheet: (props) => <Icon {...props} path={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></>} />,
+      Calendar: (props) => <Icon {...props} path={<><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>} />,
+      ArrowLeftRight: (props) => <Icon {...props} path={<><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></>} />,
+      AlertTriangle: (props) => <Icon {...props} path={<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>} />,
+      Download: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} />,
+      Upload: (props) => <Icon {...props} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>} />,
+      Settings: (props) => <Icon {...props} path={<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>} />,
+      Clock: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />,
+      CheckCircle: (props) => <Icon {...props} path={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />,
+      XCircle: (props) => <Icon {...props} path={<><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>} />,
+      Users: (props) => <Icon {...props} path={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />,
+      Filter: (props) => <Icon {...props} path={<><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></>} />,
+      EyeOff: (props) => <Icon {...props} path={<><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C7 20 2.73 16.11 1 12c.9-2.16 2.32-4.06 4.14-5.57"/><path d="M9.9 4.24A10.93 10.93 0 0 1 12 4c5 0 9.27 3.89 11 8a11.05 11.05 0 0 1-4.08 5.58"/><line x1="1" y1="1" x2="23" y2="23"/></>} />,
+      Minimize: (props) => <Icon {...props} path={<><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></>} />,
+      Maximize: (props) => <Icon {...props} path={<><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></>} />
+    };
+
+    const initialStaffNames = [
+      "吳雅芳", "林美花", "張賢慧", "吳佩芸", "楊志煒",
+      "郭勝權", "范志龍", "林徑維", "潘洧樊", "許育誠", "陳長源", "鄭安傑"
+    ];
+
+    const DEFAULT_EXTRA_IDS = ['MR02', 'MR05', 'MR06', 'MR07', 'MR08'];
+
+    const DAY_NAMES = ['日','一','二','三','四','五','六'];
+    const MONDAY_FIRST_DAY_NAMES = ['一','二','三','四','五','六','日'];
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    const OVERVIEW_COLOR = {
+      blue: { bg: '#eff6ff', text: '#1e40af' },
+      green: { bg: '#f0fdf4', text: '#166534' },
+      purple: { bg: '#f5f3ff', text: '#5b21b6' },
+      yellow: { bg: '#fefce8', text: '#854d0e' },
+      teal: { bg: '#f0fdfa', text: '#115e59' },
+      orange: { bg: '#fff7ed', text: '#9a3412' },
+      cyan: { bg: '#ecfeff', text: '#155e75' },
+      gray: { bg: '#f3f4f6', text: '#4b5563' },
+      darkgray: { bg: '#e5e7eb', text: '#1f2937' },
+      indigo: { bg: '#eef2ff', text: '#3730a3' },
+      pink: { bg: '#fdf2f8', text: '#9d174d' }
+    };
+
+    const toDateKey = (dateObj) => {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
+    const stripTime = (dateObj) => new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+
+    const getWeekStartMonday = (dateObj) => {
+      const d = stripTime(dateObj);
+      const dow = d.getDay();
+      const diff = (dow + 6) % 7;
+      d.setDate(d.getDate() - diff);
+      return d;
+    };
+
+    const normalizeStaffId = (raw) => {
+      const v = String(raw || '').trim().toUpperCase();
+      if (!v) return '';
+      if (v === 'MRO') return 'O01';
+      if (/^O\d+$/.test(v)) return `O${v.slice(1).padStart(2, '0')}`;
+
+      let core = v.startsWith('MR') ? v.slice(2) : v;
+      if (/^\d+$/.test(core)) core = core.padStart(2, '0');
+      return `MR${core}`;
+    };
+
+    const formatStaffId = (id) => normalizeStaffId(id);
+
+    const buildInitialStaff = () => {
+      const base = initialStaffNames.map((name, i) => {
+        const id = normalizeStaffId(String(i + 1));
+        return {
+          id,
+          name,
+          isSupport: false,
+          preferExtra: DEFAULT_EXTRA_IDS.includes(id),
+          allowG: true
+        };
+      });
+      base.push({ id: 'O01', name: '蔡政宏', isSupport: true, preferExtra: false, allowG: false });
+      return base;
+    };
+
+    const SHIFT_COLOR_OPTIONS = [
+      { key: 'blue', className: 'bg-blue-100 text-blue-800', cellBg: 'bg-blue-50' },
+      { key: 'green', className: 'bg-green-100 text-green-800', cellBg: 'bg-green-50' },
+      { key: 'purple', className: 'bg-purple-100 text-purple-800', cellBg: 'bg-purple-50' },
+      { key: 'yellow', className: 'bg-yellow-100 text-yellow-800', cellBg: 'bg-yellow-50' },
+      { key: 'teal', className: 'bg-teal-100 text-teal-800', cellBg: 'bg-teal-50' },
+      { key: 'orange', className: 'bg-orange-100 text-orange-800', cellBg: 'bg-orange-50' },
+      { key: 'cyan', className: 'bg-cyan-100 text-cyan-800', cellBg: 'bg-cyan-50' },
+      { key: 'gray', className: 'bg-gray-100 text-gray-600', cellBg: 'bg-gray-100' },
+      { key: 'darkgray', className: 'bg-gray-300 text-gray-800 font-bold', cellBg: 'bg-gray-200' },
+      { key: 'indigo', className: 'bg-indigo-100 text-indigo-800', cellBg: 'bg-indigo-50' },
+      { key: 'pink', className: 'bg-pink-100 text-pink-800', cellBg: 'bg-pink-50' }
+    ];
+
+    const DEFAULT_SHIFT_LIST = [
+      { code: 'B', label: '正常班 B', time: '08:00-17:00', overtime: 0, colorKey: 'blue', locked: true },
+      { code: 'G', label: '正常班 G', time: '12:30-21:00', overtime: 0.5, colorKey: 'green', locked: true },
+      { code: 'N', label: '正常班 N', time: '08:00-21:00', overtime: 4, colorKey: 'purple', locked: true },
+      { code: 'D', label: '正常班 D', time: '08:00-16:30', overtime: 0, colorKey: 'yellow', locked: false },
+      { code: 'A', label: '正常班 A', time: '-', overtime: 0.5, colorKey: 'teal', locked: false },
+      { code: 'C', label: '正常班 C', time: '08:00-12:00', overtime: 4, colorKey: 'orange', locked: false },
+      { code: '出車', label: '出車', time: '-', overtime: 0, colorKey: 'cyan', locked: false },
+      { code: '國', label: '國定假日', time: '-', overtime: 0, colorKey: 'pink', locked: true },
+      { code: 'OFF', label: '休假', time: '-', overtime: 0, colorKey: 'gray', locked: true },
+      { code: 'OFF*', label: '必休 OFF*', time: '-', overtime: 0, colorKey: 'darkgray', locked: true }
+    ];
+
+    const CALL_TYPES = [
+      { code: '21-24', label: '值 21-24' },
+      { code: '00-04', label: '值 00-04' },
+      { code: '04-07', label: '值 04-07' },
+      { code: '00-07', label: '值 00-07' },
+      { code: 'W1', label: '假日一線' },
+      { code: 'W2', label: '假日二線' }
+    ];
+    const CALL_COUNT_KEYS = ['21-24', '00-04', '04-07', '00-07', 'W1', 'W2'];
+    const PERSON_SHIFT_COUNT_KEYS = ['N', 'G', 'A', '國', 'OFF', 'OFF*'];
+
+    const buildMonthlyTargets = (totalAssignments, autoStaffIds, priorityIds) => {
+      if (autoStaffIds.length === 0) return {};
+      const targets = {};
+      const base = Math.floor(totalAssignments / autoStaffIds.length);
+      let remainder = totalAssignments % autoStaffIds.length;
+      autoStaffIds.forEach(id => targets[id] = base);
+
+      const distOrder = [
+        ...priorityIds.filter(id => autoStaffIds.includes(id)),
+        ...autoStaffIds.filter(id => !priorityIds.includes(id))
+      ];
+
+      for (let i = 0; i < distOrder.length && remainder > 0; i++) {
+        targets[distOrder[i]] += 1;
+        remainder--;
+      }
+      return targets;
+    };
+
+    const normalizeImportedHolidays = (rawHolidays, importYear, importMonth) => {
+      if (!Array.isArray(rawHolidays)) return [];
+      const out = [];
+      rawHolidays.forEach(item => {
+        if (typeof item === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item)) {
+          out.push(item);
+          return;
+        }
+        if (typeof item === 'number' && Number.isInteger(item)) {
+          const dt = new Date(importYear, importMonth, item);
+          if (dt.getMonth() === importMonth) out.push(toDateKey(dt));
+        }
+      });
+      return Array.from(new Set(out));
+    };
+
+    const parseRevisionFromVersion = (versionString) => {
+      if (typeof versionString !== 'string') return 1;
+      const m = versionString.match(/v\d+\.\d+\.(\d+)/i);
+      if (!m) return 1;
+      const n = parseInt(m[1], 10);
+      return Number.isFinite(n) && n > 0 ? n : 1;
+    };
+
+    function App() {
+      const [currentDate, setCurrentDate] = useState(() => {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      });
+
+      const [revision, setRevision] = useState(1);
+      const appVersion = `${VERSION_PREFIX}.${revision}`;
+
+      const [staffList, setStaffList] = useState(buildInitialStaff);
+      const [shiftList, setShiftList] = useState(DEFAULT_SHIFT_LIST);
+      const [schedule, setSchedule] = useState({});
+      const [customHolidays, setCustomHolidays] = useState([]);
+      const [history, setHistory] = useState([]);
+      const [redoHistory, setRedoHistory] = useState([]);
+      const [selectedTool, setSelectedTool] = useState('B');
+      const [swapSource, setSwapSource] = useState(null);
+      const [notification, setNotification] = useState(null);
+      const [activeTab, setActiveTab] = useState('schedule');
+
+      const [filterModalOpen, setFilterModalOpen] = useState(false);
+      const [holidayPanelOpen, setHolidayPanelOpen] = useState(false);
+      const [holidayDraftKeys, setHolidayDraftKeys] = useState([]);
+
+      const [autoGenConfirmOpen, setAutoGenConfirmOpen] = useState(false);
+      const [filterWeekdays, setFilterWeekdays] = useState([]);
+      const [filterDateKeys, setFilterDateKeys] = useState([]);
+      const [lastUndoDesc, setLastUndoDesc] = useState('');
+
+      const [newStaffName, setNewStaffName] = useState('');
+      const [dragStaffId, setDragStaffId] = useState(null);
+
+      const [newShiftCode, setNewShiftCode] = useState('');
+      const [newShiftLabel, setNewShiftLabel] = useState('');
+      const [newShiftTime, setNewShiftTime] = useState('-');
+      const [newShiftOt, setNewShiftOt] = useState('0');
+      const [newShiftColorKey, setNewShiftColorKey] = useState('indigo');
+      const [dragShiftCode, setDragShiftCode] = useState(null);
+
+      const [overviewWindowOpen, setOverviewWindowOpen] = useState(false);
+
+      // ===== 雲端同步狀態 =====
+      const [syncState, setSyncState] = useState('idle'); // idle | syncing | success | error
+      const [syncText, setSyncText] = useState('尚未同步');
+      const [lastSyncTime, setLastSyncTime] = useState('');
+      const [dirty, setDirty] = useState(false);
+
+      const fileInputRef = useRef(null);
+      const topScrollRef = useRef(null);
+      const mainScrollRef = useRef(null);
+      const tableRef = useRef(null);
+      const syncLock = useRef(false);
+      const overviewWinRef = useRef(null);
+      const [tableWidth, setTableWidth] = useState(1200);
+
+      const autoSyncTimerRef = useRef(null);
+      const syncingRef = useRef(false);
+      const initialMountRef = useRef(true);
+      const suppressDirtyRef = useRef(false);
+
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      useEffect(() => {
+        document.title = `MRI排班系統 ${appVersion}`;
+      }, [appVersion]);
+
+      const shiftMap = useMemo(() => {
+        const map = {};
+        shiftList.forEach(s => {
+          const color = SHIFT_COLOR_OPTIONS.find(c => c.key === s.colorKey) || SHIFT_COLOR_OPTIONS[0];
+          map[s.code] = { ...s, colorClass: color.className, cellBg: color.cellBg };
+        });
+        return map;
+      }, [shiftList]);
+
+      const editableShiftTools = useMemo(() => shiftList.map(s => s.code), [shiftList]);
+
+      const days = useMemo(() => {
+        const arr = [];
+        const firstDay = new Date(year, month, 1);
+        const prefixCount = (firstDay.getDay() + 1) % 7;
+
+        for (let i = prefixCount; i >= 1; i--) {
+          const dateObj = new Date(year, month, 1 - i);
+          const key = toDateKey(dateObj);
+          arr.push({
+            key,
+            fullDate: dateObj,
+            date: dateObj.getDate(),
+            month: dateObj.getMonth(),
+            year: dateObj.getFullYear(),
+            dayOfWeek: dateObj.getDay(),
+            inCurrentMonth: false,
+            isCustomHoliday: customHolidays.includes(key),
+            isWeekend: dateObj.getDay() === 0 || dateObj.getDay() === 6 || customHolidays.includes(key)
+          });
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+          const dateObj = new Date(year, month, i);
+          const key = toDateKey(dateObj);
+          const dayOfWeek = dateObj.getDay();
+          const isCustomHoliday = customHolidays.includes(key);
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 || isCustomHoliday;
+          arr.push({
+            key,
+            fullDate: dateObj,
+            date: i,
+            month,
+            year,
+            dayOfWeek,
+            inCurrentMonth: true,
+            isCustomHoliday,
+            isWeekend
+          });
+        }
+        return arr;
+      }, [year, month, daysInMonth, customHolidays]);
+
+      const currentMonthDays = useMemo(() => days.filter(d => d.inCurrentMonth), [days]);
+      const currentMonthKeySet = useMemo(() => new Set(currentMonthDays.map(d => d.key)), [currentMonthDays]);
+
+      const holidayCalendarCells = useMemo(() => {
+        const first = new Date(year, month, 1);
+        const mondayPrefix = (first.getDay() + 6) % 7;
+        const cells = [];
+        for (let i = 0; i < mondayPrefix; i++) cells.push(null);
+        currentMonthDays.forEach(d => cells.push(d));
+        while (cells.length % 7 !== 0) cells.push(null);
+        return cells;
+      }, [year, month, currentMonthDays]);
+
+      const displayDays = useMemo(() => {
+        if (filterWeekdays.length === 0 && filterDateKeys.length === 0) return days;
+        return days.filter(d => filterWeekdays.includes(d.dayOfWeek) || filterDateKeys.includes(d.key));
+      }, [days, filterWeekdays, filterDateKeys]);
+
+      const staffNameMap = useMemo(() => {
+        const m = {};
+        staffList.forEach(s => m[s.id] = s.name);
+        return m;
+      }, [staffList]);
+
+      const deepClone = (v) => JSON.parse(JSON.stringify(v));
+
+      const showNotification = (message, type = 'success') => {
+        setNotification({ message, type });
+        setTimeout(() => setNotification(null), 3000);
+      };
+
+      const createSnapshot = (desc = '') => ({
+        schedule: deepClone(schedule),
+        holidays: [...customHolidays],
+        staffList: deepClone(staffList),
+        shiftList: deepClone(shiftList),
+        revision,
+        desc
+      });
+
+      const pushHistory = (desc) => {
+        const snapshot = createSnapshot(desc);
+        setHistory(prev => [...prev.slice(-49), snapshot]);
+      };
+
+      const updateAllWithHistory = ({
+        nextSchedule = schedule,
+        nextHolidays = customHolidays,
+        nextStaffList = staffList,
+        nextShiftList = shiftList,
+        desc = '更新'
+      }) => {
+        pushHistory(desc);
+        setRedoHistory([]);
+        setSchedule(nextSchedule);
+        setCustomHolidays(nextHolidays);
+        setStaffList(nextStaffList);
+        setShiftList(nextShiftList);
+        setRevision(r => r + 1);
+      };
+
+      // ===== 同步工具 =====
+      const asBool = (v, defVal = false) => {
+        if (v === true || v === false) return v;
+        const s = String(v ?? '').trim().toLowerCase();
+        if (['1', 'true', 'yes', 'y', 'on'].includes(s)) return true;
+        if (['0', 'false', 'no', 'n', 'off'].includes(s)) return false;
+        return defVal;
+      };
+
+      const asNum = (v, defVal = 0) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : defVal;
+      };
+
+      const nowText = () => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+      };
+
+      const postToGAS = async (payload) => {
+        const resp = await fetch(GAS_WEBAPP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        const text = await resp.text();
+        let json;
+        try {
+          json = JSON.parse(text);
+        } catch (err) {
+          throw new Error(`GAS 回應不是 JSON：${text.slice(0, 120)}`);
+        }
+        return json;
+      };
+
+      const buildCloudImportPayload = () => {
+        const staffRows = staffList.map((s, idx) => ({
+          人員編號: s.id,
+          姓名: s.name,
+          優先加班: !!s.preferExtra,
+          安排G班: !!s.allowG,
+          身分: s.isSupport ? '支援' : '一般',
+          MRI排序: idx + 1,
+          啟用: true
+        }));
+
+        const shiftRows = shiftList.map((s, idx) => ({
+          班別編號: s.code,
+          班別名稱: s.label,
+          時段: s.time || '-',
+          加班時數: Number(s.overtime) || 0,
+          色彩代碼: s.colorKey || 'gray',
+          唯一班別: false,
+          適用組別: '全部',
+          MRI可見: true,
+          MRI排序: idx + 1,
+          鎖定: !!s.locked,
+          啟用: true
+        }));
+
+        const scheduleRows = [];
+        Object.keys(schedule || {}).forEach(dateKey => {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
+          const dayObj = schedule[dateKey] || {};
+          Object.keys(dayObj).forEach(staffId => {
+            const cell = dayObj[staffId] || {};
+            if (!staffId) return;
+            scheduleRows.push({
+              組別: CLOUD_GROUP,
+              月份: dateKey.slice(0, 7),
+              日期: dateKey,
+              人員編號: staffId,
+              班別編號: String(cell.shift || 'OFF').trim() || 'OFF',
+              業務別: String(cell.call || '').trim(),
+              備註: '',
+              加班覆寫: '',
+              資料來源: 'web'
+            });
+          });
+        });
+
+        // metadata row：保存 holidays / revision / 目前年月
+        scheduleRows.push({
+          組別: META_GROUP,
+          月份: 'META',
+          日期: META_DATE,
+          人員編號: '__META__',
+          班別編號: 'META',
+          業務別: '',
+          備註: JSON.stringify({
+            customHolidays: customHolidays || [],
+            revision,
+            currentYear: year,
+            currentMonth: month,
+            savedAt: nowText(),
+            appVersion
+          }),
+          加班覆寫: '',
+          資料來源: 'web'
+        });
+
+        return {
+          staff: staffRows,
+          shifts: shiftRows,
+          schedule: scheduleRows
+        };
+      };
+
+      const parseCloudExport = (cloudData) => {
+        const staffRows = Array.isArray(cloudData?.staff) ? cloudData.staff : [];
+        const shiftRows = Array.isArray(cloudData?.shifts) ? cloudData.shifts : [];
+        const scheduleRows = Array.isArray(cloudData?.schedule) ? cloudData.schedule : [];
+
+        const parsedStaff = staffRows
+          .slice()
+          .sort((a, b) => asNum(a['MRI排序'], 9999) - asNum(b['MRI排序'], 9999))
+          .map(r => {
+            const id = normalizeStaffId(r['人員編號']);
+            return {
+              id,
+              name: String(r['姓名'] || '').trim() || id,
+              preferExtra: asBool(r['優先加班'], false),
+              allowG: asBool(r['安排G班'], true),
+              isSupport: String(r['身分'] || '').trim() === '支援'
+            };
+          })
+          .filter(s => !!s.id);
+
+        const parsedShift = shiftRows
+          .slice()
+          .sort((a, b) => asNum(a['MRI排序'], 9999) - asNum(b['MRI排序'], 9999))
+          .map(r => ({
+            code: String(r['班別編號'] || '').trim(),
+            label: String(r['班別名稱'] || '').trim() || String(r['班別編號'] || '').trim(),
+            time: String(r['時段'] || '-').trim() || '-',
+            overtime: asNum(r['加班時數'], 0),
+            colorKey: String(r['色彩代碼'] || 'gray').trim() || 'gray',
+            locked: asBool(r['鎖定'], false)
+          }))
+          .filter(s => !!s.code);
+
+        const shiftMapLocal = new Map(parsedShift.map(s => [s.code, s]));
+        DEFAULT_SHIFT_LIST.forEach(def => {
+          if (!shiftMapLocal.has(def.code)) shiftMapLocal.set(def.code, def);
+        });
+        const finalShiftList = Array.from(shiftMapLocal.values());
+
+        const parsedSchedule = {};
+        let meta = {};
+
+        scheduleRows.forEach(r => {
+          const group = String(r['組別'] || '').trim();
+          const date = String(r['日期'] || '').trim();
+          const staffIdRaw = String(r['人員編號'] || '').trim();
+
+          if (group === META_GROUP && staffIdRaw === '__META__') {
+            try {
+              meta = JSON.parse(String(r['備註'] || '{}'));
+            } catch (_) {}
+            return;
+          }
+
+          if (group !== CLOUD_GROUP) return;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+          const staffId = normalizeStaffId(staffIdRaw) || staffIdRaw;
+          if (!staffId) return;
+
+          if (!parsedSchedule[date]) parsedSchedule[date] = {};
+          parsedSchedule[date][staffId] = {
+            shift: String(r['班別編號'] || 'OFF').trim() || 'OFF',
+            call: String(r['業務別'] || '').trim()
+          };
+        });
+
+        const holidays = Array.isArray(meta.customHolidays)
+          ? Array.from(new Set(meta.customHolidays.filter(k => /^\d{4}-\d{2}-\d{2}$/.test(String(k)))))
+          : [];
+
+        return {
+          staffList: parsedStaff.length > 0 ? parsedStaff : buildInitialStaff(),
+          shiftList: finalShiftList,
+          schedule: parsedSchedule,
+          customHolidays: holidays,
+          meta
+        };
+      };
+
+      const syncToCloud = async (isAuto = false) => {
+        if (syncingRef.current) {
+          if (!isAuto) showNotification('同步進行中，請稍候', 'error');
+          return;
+        }
+        syncingRef.current = true;
+        setSyncState('syncing');
+        setSyncText(isAuto ? '自動同步中...' : '手動同步中...');
+
+        try {
+          const payload = buildCloudImportPayload();
+          const result = await postToGAS({
+            action: 'importAll',
+            app: 'MRI排班系統-Web',
+            ...payload
+          });
+
+          if (!result?.ok) {
+            throw new Error(result?.error || '同步失敗');
+          }
+
+          const t = nowText();
+          setDirty(false);
+          setSyncState('success');
+          setSyncText('同步成功');
+          setLastSyncTime(t);
+
+          if (!isAuto) showNotification('已強制同步到雲端', 'success');
+        } catch (err) {
+          setSyncState('error');
+          setSyncText(`同步失敗：${String(err.message || err)}`);
+          if (!isAuto) showNotification(`同步失敗：${String(err.message || err)}`, 'error');
+        } finally {
+          syncingRef.current = false;
+        }
+      };
+
+      const loadFromCloud = async () => {
+        if (syncingRef.current) {
+          showNotification('目前同步中，請稍候再讀取', 'error');
+          return;
+        }
+        syncingRef.current = true;
+        setSyncState('syncing');
+        setSyncText('雲端讀取中...');
+
+        try {
+          const url = `${GAS_WEBAPP_URL}?action=exportAll&app=MRI排班系統-Web&_t=${Date.now()}`;
+          const resp = await fetch(url, { method: 'GET' });
+          const text = await resp.text();
+          let json;
+          try {
+            json = JSON.parse(text);
+          } catch (err) {
+            throw new Error(`雲端回應不是 JSON：${text.slice(0, 120)}`);
+          }
+          if (!json?.ok) throw new Error(json?.error || '雲端讀取失敗');
+
+          const parsed = parseCloudExport(json.data || {});
+
+          suppressDirtyRef.current = true;
+          setSchedule(parsed.schedule || {});
+          setCustomHolidays(parsed.customHolidays || []);
+          setStaffList(parsed.staffList || buildInitialStaff());
+          setShiftList(parsed.shiftList || DEFAULT_SHIFT_LIST);
+          setHistory([]);
+          setRedoHistory([]);
+          setLastUndoDesc('');
+
+          if (Number.isFinite(parsed?.meta?.revision) && parsed.meta.revision > 0) {
+            setRevision(parsed.meta.revision);
+          } else {
+            setRevision(r => r + 1);
+          }
+
+          if (
+            Number.isInteger(parsed?.meta?.currentYear) &&
+            Number.isInteger(parsed?.meta?.currentMonth)
+          ) {
+            setCurrentDate(new Date(parsed.meta.currentYear, parsed.meta.currentMonth, 1));
+          }
+
+          setTimeout(() => { suppressDirtyRef.current = false; }, 0);
+
+          const t = nowText();
+          setDirty(false);
+          setSyncState('success');
+          setSyncText('雲端讀取成功');
+          setLastSyncTime(t);
+          showNotification('已從雲端讀取資料', 'success');
+        } catch (err) {
+          setSyncState('error');
+          setSyncText(`雲端讀取失敗：${String(err.message || err)}`);
+          showNotification(`雲端讀取失敗：${String(err.message || err)}`, 'error');
+        } finally {
+          syncingRef.current = false;
+        }
+      };
+
+      // 當核心資料異動，10 秒後自動同步
+      useEffect(() => {
+        if (initialMountRef.current) {
+          initialMountRef.current = false;
+          return;
+        }
+        if (suppressDirtyRef.current) return;
+
+        setDirty(true);
+        if (syncState !== 'syncing') {
+          setSyncState('idle');
+          setSyncText('資料已變更，10秒後自動同步...');
+        }
+
+        if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+        autoSyncTimerRef.current = setTimeout(() => {
+          syncToCloud(true);
+        }, 10000);
+
+        return () => {
+          if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+        };
+      }, [schedule, customHolidays, staffList, shiftList]);
+
+      useEffect(() => {
+        return () => {
+          if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+        };
+      }, []);
+
+      const requestUndo = () => {
+        if (history.length === 0) return;
+        const currentSnapshot = createSnapshot('目前狀態');
+        setRedoHistory(prev => [...prev.slice(-49), currentSnapshot]);
+
+        const last = history[history.length - 1];
+        setHistory(prev => prev.slice(0, -1));
+        setSchedule(last.schedule);
+        setCustomHolidays(last.holidays);
+        setStaffList(last.staffList || buildInitialStaff());
+        setShiftList(last.shiftList || DEFAULT_SHIFT_LIST);
+        setRevision(last.revision || 1);
+        setSwapSource(null);
+        setLastUndoDesc(`已復原：${last.desc || '上一步操作'}`);
+      };
+
+      const requestRedo = () => {
+        if (redoHistory.length === 0) return;
+        const currentSnapshot = createSnapshot('目前狀態');
+        setHistory(prev => [...prev.slice(-49), currentSnapshot]);
+
+        const next = redoHistory[redoHistory.length - 1];
+        setRedoHistory(prev => prev.slice(0, -1));
+        setSchedule(next.schedule);
+        setCustomHolidays(next.holidays);
+        setStaffList(next.staffList || buildInitialStaff());
+        setShiftList(next.shiftList || DEFAULT_SHIFT_LIST);
+        setRevision(next.revision || 1);
+        setSwapSource(null);
+        setLastUndoDesc(`已取消復原：${next.desc || '下一步操作'}`);
+      };
+
+      const getCell = (srcSchedule, dayObj, staffId) => {
+        const key = dayObj.key;
+        const direct = srcSchedule[key]?.[staffId];
+        if (direct) return direct;
+        if (dayObj.inCurrentMonth) return srcSchedule[`day-${dayObj.date}`]?.[staffId];
+        return undefined;
+      };
+
+      const ensureCell = (targetSchedule, dayObj, staffId) => {
+        const key = dayObj.key;
+        if (!targetSchedule[key]) targetSchedule[key] = {};
+        if (!targetSchedule[key][staffId]) targetSchedule[key][staffId] = { shift: 'OFF', call: '' };
+        if (typeof targetSchedule[key][staffId].call !== 'string') targetSchedule[key][staffId].call = '';
+        return targetSchedule[key][staffId];
+      };
+
+      const calculateDailyStats = (staffId, dayObj, srcSchedule) => {
+        const cell = getCell(srcSchedule, dayObj, staffId);
+        if (!cell) return { shiftOvertime: 0 };
+        const shiftOvertime = shiftMap[cell.shift]?.overtime || 0;
+        return { shiftOvertime };
+      };
+
+      const checkSevenDayStreak = (staffId, dayObj, srcSchedule) => {
+        let consecutiveDays = 0;
+        const base = stripTime(dayObj.fullDate);
+        for (let i = 0; i < 7; i++) {
+          const targetDate = new Date(base);
+          targetDate.setDate(base.getDate() - i);
+          const targetDayObj = {
+            key: toDateKey(targetDate),
+            fullDate: targetDate,
+            inCurrentMonth: targetDate.getMonth() === month && targetDate.getFullYear() === year,
+            date: targetDate.getDate()
+          };
+          const cell = getCell(srcSchedule, targetDayObj, staffId);
+          if (!cell) break;
+          const isWorking = (!['OFF', 'OFF*', '國'].includes(cell.shift) || cell.call !== '');
+          if (isWorking) consecutiveDays++;
+          else break;
+        }
+        return consecutiveDays >= 7;
+      };
+
+      const getWeekInfoBeforeDate = (staffId, dateObj, srcSchedule) => {
+        const weekStart = getWeekStartMonday(dateObj);
+        const endDate = stripTime(dateObj);
+        endDate.setDate(endDate.getDate() - 1);
+
+        let nCount = 0;
+        let gCount = 0;
+        const specialDates = [];
+
+        for (let cursor = new Date(weekStart); cursor <= endDate; cursor.setDate(cursor.getDate() + 1)) {
+          const dayObj = {
+            key: toDateKey(cursor),
+            fullDate: new Date(cursor),
+            inCurrentMonth: cursor.getMonth() === month && cursor.getFullYear() === year,
+            date: cursor.getDate()
+          };
+          const cell = getCell(srcSchedule, dayObj, staffId);
+          if (!cell) continue;
+          if (cell.shift === 'N') {
+            nCount++;
+            specialDates.push(stripTime(cursor));
+          }
+          if (cell.shift === 'G') {
+            gCount++;
+            specialDates.push(stripTime(cursor));
+          }
+        }
+        return { nCount, gCount, specialDates };
+      };
+
+      const isCurrentMonthBlank = useMemo(() => {
+        for (const d of currentMonthDays) {
+          for (const s of staffList) {
+            const cell = getCell(schedule, d, s.id);
+            if (!cell) continue;
+            const hasShift = typeof cell.shift === 'string' && cell.shift.trim() !== '';
+            const hasCall = typeof cell.call === 'string' && cell.call.trim() !== '';
+            if (hasShift || hasCall) return false;
+          }
+        }
+        return true;
+      }, [schedule, currentMonthDays, staffList]);
+
+      const generateAutoShifts = () => {
+        if (!shiftMap.B || !shiftMap.G || !shiftMap.N || !shiftMap.OFF || !shiftMap['OFF*'] || !shiftMap['國']) {
+          showNotification('自動排班需要班別 B / G / N / 國 / OFF / OFF* 存在', 'error');
+          return;
+        }
+
+        const newSchedule = deepClone(schedule);
+        const supportIds = staffList.filter(s => s.isSupport).map(s => s.id);
+        const autoStaffIds = staffList.filter(s => !s.isSupport).map(s => s.id);
+        const gEligibleIds = staffList.filter(s => !s.isSupport && s.allowG).map(s => s.id);
+        const priorityIds = staffList.filter(s => !s.isSupport && s.preferExtra).map(s => s.id);
+
+        if (autoStaffIds.length === 0 && supportIds.length === 0) {
+          showNotification('目前無可排班人員', 'error');
+          return;
+        }
+
+        const priorityRank = {};
+        priorityIds.forEach((id, idx) => { priorityRank[id] = idx; });
+
+        days.forEach(d => staffList.forEach(s => ensureCell(newSchedule, d, s.id)));
+
+        currentMonthDays.forEach(d => {
+          if (!d.isWeekend) {
+            staffList.forEach(s => {
+              const cell = ensureCell(newSchedule, d, s.id);
+              if (cell.shift !== 'OFF*') {
+                cell.shift = 'OFF';
+                cell.call = '';
+              }
+            });
+          }
+        });
+
+        currentMonthDays.forEach(d => {
+          if (d.isCustomHoliday) {
+            staffList.forEach(s => {
+              const c = ensureCell(newSchedule, d, s.id);
+              if (c.shift !== 'OFF*') {
+                c.shift = '國';
+                c.call = '';
+              }
+            });
+          }
+        });
+
+        currentMonthDays.forEach(d => {
+          if (!d.isWeekend) {
+            supportIds.forEach(id => {
+              const c = ensureCell(newSchedule, d, id);
+              if (c.shift !== 'OFF*') c.shift = 'B';
+            });
+          }
+        });
+
+        const workdays = currentMonthDays.filter(d => !d.isWeekend);
+        const totalN = workdays.length * 2;
+        const totalG = workdays.length * 2;
+        const targetN = buildMonthlyTargets(totalN, autoStaffIds, priorityIds);
+        const gPriorityIds = priorityIds.filter(id => gEligibleIds.includes(id));
+        const targetG = buildMonthlyTargets(totalG, gEligibleIds, gPriorityIds);
+
+        const monthlyCounts = {};
+        autoStaffIds.forEach(id => monthlyCounts[id] = { N: 0, G: 0 });
+        const warnings = [];
+
+        const pickSpecial = (dayObj, shiftType, excludeIds = new Set()) => {
+          const dayDate = stripTime(dayObj.fullDate);
+          const poolIds = shiftType === 'G' ? gEligibleIds : autoStaffIds;
+
+          const available = poolIds.filter(id => {
+            if (excludeIds.has(id)) return false;
+            const cell = ensureCell(newSchedule, dayObj, id);
+            if (cell.shift === 'OFF*' || cell.shift === '國') return false;
+
+            const weekInfo = getWeekInfoBeforeDate(id, dayObj.fullDate, newSchedule);
+            if (shiftType === 'N' && weekInfo.nCount >= 1) return false;
+            if (shiftType === 'G' && weekInfo.gCount >= 1) return false;
+
+            const spaced = weekInfo.specialDates.every(spDate => {
+              const diffDays = Math.abs((dayDate - spDate) / DAY_MS);
+              return diffDays >= 2;
+            });
+            if (!spaced) return false;
+
+            return true;
+          });
+
+          const targetMap = shiftType === 'N' ? targetN : targetG;
+          available.sort((a, b) => {
+            const deficitA = (targetMap[a] || 0) - monthlyCounts[a][shiftType];
+            const deficitB = (targetMap[b] || 0) - monthlyCounts[b][shiftType];
+            if (deficitA !== deficitB) return deficitB - deficitA;
+            if (monthlyCounts[a][shiftType] !== monthlyCounts[b][shiftType]) {
+              return monthlyCounts[a][shiftType] - monthlyCounts[b][shiftType];
+            }
+            const ra = priorityRank[a] ?? 999;
+            const rb = priorityRank[b] ?? 999;
+            if (ra !== rb) return ra - rb;
+            return 0.5 - Math.random();
+          });
+
+          return available.slice(0, 2);
+        };
+
+        workdays.forEach(d => {
+          const pickedN = pickSpecial(d, 'N');
+          pickedN.forEach(id => {
+            const c = ensureCell(newSchedule, d, id);
+            c.shift = 'N';
+            monthlyCounts[id].N++;
+          });
+
+          const pickedNSet = new Set(pickedN);
+          const pickedG = pickSpecial(d, 'G', pickedNSet);
+          pickedG.forEach(id => {
+            const c = ensureCell(newSchedule, d, id);
+            c.shift = 'G';
+            monthlyCounts[id].G++;
+          });
+
+          const pickedAll = new Set([...pickedN, ...pickedG]);
+          autoStaffIds.forEach(id => {
+            const c = ensureCell(newSchedule, d, id);
+            if (c.shift === 'OFF*') return;
+            if (!pickedAll.has(id)) c.shift = 'B';
+          });
+
+          if (pickedN.length < 2 || pickedG.length < 2) {
+            warnings.push(`${d.month + 1}/${d.date} 無法完整排到 2N2G（受限制）`);
+          }
+        });
+
+        updateAllWithHistory({ nextSchedule: newSchedule, desc: '自動排班別' });
+
+        if (warnings.length > 0) {
+          showNotification(`已完成排班，但有 ${warnings.length} 天未達 2N2G`, 'error');
+        } else {
+          showNotification('自動排班完成', 'success');
+        }
+      };
+
+      const handleAutoGenerateRequest = () => {
+        if (isCurrentMonthBlank) {
+          setAutoGenConfirmOpen(true);
+          return;
+        }
+        generateAutoShifts();
+      };
+
+      const handleCellClick = (day, staffId) => {
+        if (selectedTool === 'SWAP') {
+          if (!swapSource) {
+            setSwapSource({ day, staffId });
+          } else {
+            const newSchedule = deepClone(schedule);
+            const sourceCell = ensureCell(newSchedule, swapSource.day, swapSource.staffId);
+            const targetCell = ensureCell(newSchedule, day, staffId);
+            const temp = { ...sourceCell };
+            newSchedule[swapSource.day.key][swapSource.staffId] = { ...targetCell };
+            newSchedule[day.key][staffId] = temp;
+
+            const desc = `對調 ${swapSource.day.month + 1}/${swapSource.day.date}(${staffNameMap[swapSource.staffId] || swapSource.staffId}) 與 ${day.month + 1}/${day.date}(${staffNameMap[staffId] || staffId})`;
+            updateAllWithHistory({ nextSchedule: newSchedule, desc });
+            setSwapSource(null);
+          }
+          return;
+        }
+
+        const newSchedule = deepClone(schedule);
+        const currentCell = ensureCell(newSchedule, day, staffId);
+        let desc = '';
+
+        if (shiftMap[selectedTool]) {
+          currentCell.shift = selectedTool;
+          desc = `${day.month + 1}/${day.date} ${staffNameMap[staffId] || staffId} 班別改為 ${selectedTool}`;
+        } else if (CALL_COUNT_KEYS.includes(selectedTool)) {
+          currentCell.call = currentCell.call === selectedTool ? '' : selectedTool;
+          desc = `${day.month + 1}/${day.date} ${staffNameMap[staffId] || staffId} 值班改為 ${currentCell.call || '清除'}`;
+        } else if (selectedTool === 'CLEAR_CALL') {
+          currentCell.call = '';
+          desc = `${day.month + 1}/${day.date} ${staffNameMap[staffId] || staffId} 清除值班`;
+        } else {
+          return;
+        }
+
+        updateAllWithHistory({ nextSchedule: newSchedule, desc: desc || '手動修改排班' });
+      };
+
+      const openHolidayPanel = () => {
+        const init = customHolidays.filter(k => currentMonthKeySet.has(k));
+        setHolidayDraftKeys(init);
+        setHolidayPanelOpen(true);
+      };
+
+      const applyHolidayPanel = () => {
+        const otherMonths = customHolidays.filter(k => !currentMonthKeySet.has(k));
+        const merged = Array.from(new Set([...otherMonths, ...holidayDraftKeys]));
+        updateAllWithHistory({
+          nextHolidays: merged,
+          desc: `更新 ${year}年${month + 1}月國定假日（${holidayDraftKeys.length}天）`
+        });
+        setHolidayPanelOpen(false);
+        showNotification(`已更新 ${month + 1} 月國定假日`, 'success');
+      };
+
+      const exportCSV = () => {
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        let header = "人員,";
+        currentMonthDays.forEach(d => {
+          header += `${d.date}(${DAY_NAMES[d.dayOfWeek]}),`;
+        });
+        header += "班別加班,值班班別統計\n";
+        csvContent += header;
+
+        staffList.forEach(staff => {
+          let row = `${staff.name},`;
+          let totalShiftOvertime = 0;
+          const callCounts = { '21-24':0, '00-04':0, '04-07':0, '00-07':0, 'W1':0, 'W2':0 };
+
+          currentMonthDays.forEach(d => {
+            const cell = getCell(schedule, d, staff.id) || { shift: '', call: '' };
+            let cellText = cell.shift || '';
+            if (cell.call) cellText += `+${cell.call}`;
+            row += `"${cellText}",`;
+            totalShiftOvertime += calculateDailyStats(staff.id, d, schedule).shiftOvertime;
+            if (cell.call && callCounts[cell.call] !== undefined) callCounts[cell.call] += 1;
+          });
+
+          const callSummary = CALL_COUNT_KEYS
+            .filter(k => callCounts[k] > 0)
+            .map(k => `${k}:${callCounts[k]}`)
+            .join('、');
+
+          row += `${totalShiftOvertime},"${callSummary}"\n`;
+          csvContent += row;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `MRI_schedule_${year}_${month + 1}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const normalizeImportedSchedule = (rawSchedule, importYear, importMonth, idMap) => {
+        const normalized = {};
+        Object.keys(rawSchedule || {}).forEach(k => {
+          const m = k.match(/^day-(\d+)$/);
+          let finalKey = k;
+          if (m) {
+            const dayNum = parseInt(m[1], 10);
+            const dt = new Date(importYear, importMonth, dayNum);
+            finalKey = toDateKey(dt);
+          }
+
+          normalized[finalKey] = {};
+          const dayObj = rawSchedule[k] || {};
+          Object.keys(dayObj).forEach(oldStaffId => {
+            const newStaffId = idMap[oldStaffId] || normalizeStaffId(oldStaffId);
+            normalized[finalKey][newStaffId] = dayObj[oldStaffId];
+          });
+        });
+        return normalized;
+      };
+
+      const getAvailableMRId = (usedSet) => {
+        for (let i = 1; i <= 999; i++) {
+          const candidate = normalizeStaffId(String(i));
+          if (!usedSet.has(candidate)) return candidate;
+        }
+        return `MRX${Date.now().toString().slice(-4)}`;
+      };
+
+      const exportJSON = () => {
+        const data = {
+          version: appVersion,
+          year, month, schedule, customHolidays, staffList, shiftList,
+          timestamp: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `MRI_schedule_backup_${year}_${month + 1}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const importJSON = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (data.year && data.month !== undefined && data.schedule) {
+              const rawImportedStaff = (data.staffList || buildInitialStaff());
+              const used = new Set();
+              const idMap = {};
+
+              const importedStaff = rawImportedStaff.map(s => {
+                const oldId = String(s.id || '').trim();
+                let newId = normalizeStaffId(oldId);
+                if (!newId) newId = getAvailableMRId(used);
+                if (used.has(newId)) newId = getAvailableMRId(used);
+                used.add(newId);
+                idMap[oldId] = newId;
+
+                return {
+                  ...s,
+                  id: newId,
+                  preferExtra: typeof s.preferExtra === 'boolean' ? s.preferExtra : false,
+                  isSupport: !!s.isSupport,
+                  allowG: typeof s.allowG === 'boolean' ? s.allowG : !s.isSupport
+                };
+              });
+
+              const normalized = normalizeImportedSchedule(data.schedule, data.year, data.month, idMap);
+              const normalizedHolidays = normalizeImportedHolidays(data.customHolidays || [], data.year, data.month);
+
+              const importedShiftList = (Array.isArray(data.shiftList) && data.shiftList.length > 0)
+                ? data.shiftList.map(s => ({
+                    code: s.code || '',
+                    label: s.label || s.code || '',
+                    time: s.time || '-',
+                    overtime: Number(s.overtime) || 0,
+                    colorKey: s.colorKey || 'indigo',
+                    locked: !!s.locked
+                  }))
+                : DEFAULT_SHIFT_LIST;
+
+              const hasNational = importedShiftList.some(s => s.code === '國');
+              const finalShiftList = hasNational
+                ? importedShiftList
+                : [...importedShiftList, { code: '國', label: '國定假日', time: '-', overtime: 0, colorKey: 'pink', locked: true }];
+
+              setCurrentDate(new Date(data.year, data.month, 1));
+              setSchedule(normalized);
+              setCustomHolidays(normalizedHolidays);
+              setStaffList(importedStaff);
+              setShiftList(finalShiftList);
+              setHistory([]);
+              setRedoHistory([]);
+              setLastUndoDesc('');
+              setAutoGenConfirmOpen(false);
+
+              const importedRev = parseRevisionFromVersion(data.version);
+              setRevision(importedRev);
+
+              showNotification(`成功匯入 ${data.year}年${data.month + 1}月${data.version ? `（${data.version}）` : ''}`, 'success');
+            } else {
+              showNotification("檔案格式錯誤：缺少必要欄位", 'error');
+            }
+          } catch (err) {
+            showNotification("讀取檔案失敗：JSON 解析錯誤", 'error');
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+      };
+
+      const stats = useMemo(() => {
+        const data = {};
+        staffList.forEach(s => {
+          let monthlyShiftOvertime = 0;
+          const shiftCountMap = { N: 0, G: 0, A: 0, '國': 0, OFF: 0, 'OFF*': 0 };
+          const callCounts = { '21-24':0, '00-04':0, '04-07':0, '00-07':0, 'W1':0, 'W2':0 };
+
+          currentMonthDays.forEach(d => {
+            monthlyShiftOvertime += calculateDailyStats(s.id, d, schedule).shiftOvertime;
+            const cell = getCell(schedule, d, s.id);
+            const shift = cell?.shift;
+            const call = cell?.call;
+            if (shiftCountMap[shift] !== undefined) shiftCountMap[shift] += 1;
+            if (call && callCounts[call] !== undefined) callCounts[call] += 1;
+          });
+
+          data[s.id] = { monthlyShiftOvertime, shiftCountMap, callCounts };
+        });
+        return data;
+      }, [schedule, currentMonthDays, staffList, shiftMap]);
+
+      const dailyStats = useMemo(() => {
+        const out = {};
+        days.forEach(d => {
+          let n = 0, g = 0, a = 0;
+          staffList.forEach(s => {
+            const cell = getCell(schedule, d, s.id);
+            const shift = cell?.shift || 'OFF';
+            if (shift === 'N') n++;
+            if (shift === 'G') g++;
+            if (shift === 'A') a++;
+          });
+          out[d.key] = { n, g, a };
+        });
+        return out;
+      }, [schedule, days, staffList]);
+
+      const getNextStaffId = () => {
+        const used = new Set(staffList.map(s => s.id));
+        return getAvailableMRId(used);
+      };
+
+      const addStaff = () => {
+        const name = newStaffName.trim();
+        if (!name) return showNotification('請先輸入姓名', 'error');
+        const id = getNextStaffId();
+        const newMember = { id, name, isSupport: false, preferExtra: false, allowG: true };
+        const nextStaff = [...staffList, newMember];
+        const newSchedule = deepClone(schedule);
+        days.forEach(d => ensureCell(newSchedule, d, id));
+
+        updateAllWithHistory({
+          nextSchedule: newSchedule,
+          nextStaffList: nextStaff,
+          desc: `新增人員 ${name}(${id})`
+        });
+        setNewStaffName('');
+        showNotification(`已新增人員 ${name}(${id})`, 'success');
+      };
+
+      const removeStaff = (id) => {
+        const target = staffList.find(s => s.id === id);
+        if (!target) return;
+        if (staffList.length <= 1) return showNotification('至少需保留 1 位人員', 'error');
+
+        const nextStaff = staffList.filter(s => s.id !== id);
+        const newSchedule = deepClone(schedule);
+        Object.keys(newSchedule).forEach(dayKey => {
+          if (newSchedule[dayKey] && newSchedule[dayKey][id]) delete newSchedule[dayKey][id];
+        });
+
+        updateAllWithHistory({
+          nextSchedule: newSchedule,
+          nextStaffList: nextStaff,
+          desc: `刪除人員 ${target.name}(${target.id})`
+        });
+        showNotification(`已刪除 ${target.name}`, 'success');
+      };
+
+      const renameStaff = (id, name) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const nextStaff = staffList.map(s => s.id === id ? { ...s, name: trimmed } : s);
+        updateAllWithHistory({ nextStaffList: nextStaff, desc: `修改人員 ${id} 姓名為 ${trimmed}` });
+      };
+
+      const changeStaffId = (oldId, newIdRaw) => {
+        const newId = normalizeStaffId(newIdRaw);
+        if (!newId) return showNotification('編號不可為空', 'error');
+        if (oldId === newId) return;
+        if (staffList.some(s => s.id === newId)) return showNotification(`編號 ${newId} 已存在`, 'error');
+
+        const nextStaff = staffList.map(s => s.id === oldId ? { ...s, id: newId } : s);
+        const newSchedule = deepClone(schedule);
+
+        Object.keys(newSchedule).forEach(dayKey => {
+          if (newSchedule[dayKey] && newSchedule[dayKey][oldId]) {
+            newSchedule[dayKey][newId] = newSchedule[dayKey][oldId];
+            delete newSchedule[dayKey][oldId];
+          }
+        });
+
+        updateAllWithHistory({
+          nextSchedule: newSchedule,
+          nextStaffList: nextStaff,
+          desc: `人員編號 ${oldId} 改為 ${newId}`
+        });
+        showNotification(`已更新編號：${oldId} → ${newId}`, 'success');
+      };
+
+      const togglePreferExtra = (id) => {
+        const target = staffList.find(s => s.id === id);
+        if (!target || target.isSupport) return;
+        const nextStaff = staffList.map(s => s.id === id ? { ...s, preferExtra: !s.preferExtra } : s);
+        updateAllWithHistory({
+          nextStaffList: nextStaff,
+          desc: `${target.name} ${target.preferExtra ? '取消' : '設定'}優先分配加班`
+        });
+      };
+
+      const toggleAllowG = (id) => {
+        const target = staffList.find(s => s.id === id);
+        if (!target || target.isSupport) return;
+        const nextStaff = staffList.map(s => s.id === id ? { ...s, allowG: !s.allowG } : s);
+        updateAllWithHistory({
+          nextStaffList: nextStaff,
+          desc: `${target.name} ${target.allowG ? '取消' : '允許'}安排G班`
+        });
+      };
+
+      const reorderStaff = (dragId, targetId) => {
+        if (!dragId || !targetId || dragId === targetId) return;
+        const fromIdx = staffList.findIndex(s => s.id === dragId);
+        const toIdx = staffList.findIndex(s => s.id === targetId);
+        if (fromIdx < 0 || toIdx < 0) return;
+
+        const next = [...staffList];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+
+        updateAllWithHistory({ nextStaffList: next, desc: `調整人員順序：${moved.name}` });
+      };
+
+      const normalizeShiftCode = (raw) => {
+        const v = raw.trim();
+        return v ? v.toUpperCase() : '';
+      };
+
+      const addShift = () => {
+        const code = normalizeShiftCode(newShiftCode);
+        const label = newShiftLabel.trim();
+        const time = newShiftTime.trim() || '-';
+        const overtime = Number(newShiftOt);
+
+        if (!code) return showNotification('請輸入班別代碼', 'error');
+        if (!label) return showNotification('請輸入班別名稱', 'error');
+        if (shiftList.some(s => s.code === code)) return showNotification(`班別 ${code} 已存在`, 'error');
+        if (Number.isNaN(overtime)) return showNotification('加班時數需為數字', 'error');
+
+        const nextShiftList = [...shiftList, { code, label, time, overtime, colorKey: newShiftColorKey, locked: false }];
+
+        updateAllWithHistory({ nextShiftList, desc: `新增班別 ${code}` });
+        setNewShiftCode('');
+        setNewShiftLabel('');
+        setNewShiftTime('-');
+        setNewShiftOt('0');
+        setNewShiftColorKey('indigo');
+        showNotification(`已新增班別 ${code}`, 'success');
+      };
+
+      const updateShiftField = (code, patch) => {
+        const nextShiftList = shiftList.map(s => s.code === code ? { ...s, ...patch } : s);
+        updateAllWithHistory({ nextShiftList, desc: `更新班別 ${code}` });
+      };
+
+      const changeShiftCode = (oldCode, newCodeRaw) => {
+        const newCode = normalizeShiftCode(newCodeRaw);
+        if (!newCode) return showNotification('班別代碼不可空白', 'error');
+        if (oldCode === newCode) return;
+        if (shiftList.some(s => s.code === newCode)) return showNotification(`班別 ${newCode} 已存在`, 'error');
+
+        const target = shiftList.find(s => s.code === oldCode);
+        if (!target) return;
+        if (target.locked) return showNotification(`班別 ${oldCode} 為系統班別，不可改代碼`, 'error');
+
+        const nextShiftList = shiftList.map(s => s.code === oldCode ? { ...s, code: newCode } : s);
+        const newSchedule = deepClone(schedule);
+
+        Object.keys(newSchedule).forEach(dayKey => {
+          Object.keys(newSchedule[dayKey] || {}).forEach(staffId => {
+            if (newSchedule[dayKey][staffId]?.shift === oldCode) {
+              newSchedule[dayKey][staffId].shift = newCode;
+            }
+          });
+        });
+
+        let nextSelected = selectedTool;
+        if (selectedTool === oldCode) nextSelected = newCode;
+
+        updateAllWithHistory({
+          nextShiftList,
+          nextSchedule: newSchedule,
+          desc: `班別代碼 ${oldCode} 改為 ${newCode}`
+        });
+        setSelectedTool(nextSelected);
+        showNotification(`已更新班別代碼：${oldCode} → ${newCode}`, 'success');
+      };
+
+      const deleteShift = (code) => {
+        const target = shiftList.find(s => s.code === code);
+        if (!target) return;
+        if (target.locked) return showNotification(`班別 ${code} 為系統班別，不可刪除`, 'error');
+        if (shiftList.length <= 1) return showNotification('至少需保留 1 種班別', 'error');
+
+        const nextShiftList = shiftList.filter(s => s.code !== code);
+        const newSchedule = deepClone(schedule);
+
+        Object.keys(newSchedule).forEach(dayKey => {
+          Object.keys(newSchedule[dayKey] || {}).forEach(staffId => {
+            if (newSchedule[dayKey][staffId]?.shift === code) {
+              newSchedule[dayKey][staffId].shift = 'OFF';
+            }
+          });
+        });
+
+        updateAllWithHistory({
+          nextShiftList,
+          nextSchedule: newSchedule,
+          desc: `刪除班別 ${code}`
+        });
+
+        if (selectedTool === code) setSelectedTool('B');
+        showNotification(`已刪除班別 ${code}（原排入者改 OFF）`, 'success');
+      };
+
+      const reorderShift = (dragCode, targetCode) => {
+        if (!dragCode || !targetCode || dragCode === targetCode) return;
+        const fromIdx = shiftList.findIndex(s => s.code === dragCode);
+        const toIdx = shiftList.findIndex(s => s.code === targetCode);
+        if (fromIdx < 0 || toIdx < 0) return;
+
+        const next = [...shiftList];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+
+        updateAllWithHistory({ nextShiftList: next, desc: `調整班別順序：${moved.code}` });
+      };
+
+      useEffect(() => {
+        const isSpecialTool = selectedTool === 'SWAP' || selectedTool === 'CLEAR_CALL' || CALL_COUNT_KEYS.includes(selectedTool);
+        if (!shiftMap[selectedTool] && !isSpecialTool) setSelectedTool('B');
+      }, [shiftList]);
+
+      useEffect(() => {
+        const updateWidth = () => {
+          if (tableRef.current) {
+            setTableWidth(tableRef.current.scrollWidth || 1200);
+          }
+        };
+        updateWidth();
+        const t = setTimeout(updateWidth, 80);
+        window.addEventListener('resize', updateWidth);
+        return () => {
+          clearTimeout(t);
+          window.removeEventListener('resize', updateWidth);
+        };
+      }, [displayDays, staffList, schedule, activeTab]);
+
+      useEffect(() => {
+        if (!overviewWindowOpen) return;
+        const timer = setInterval(() => {
+          if (!overviewWinRef.current || overviewWinRef.current.closed) {
+            overviewWinRef.current = null;
+            setOverviewWindowOpen(false);
+          }
+        }, 500);
+        return () => clearInterval(timer);
+      }, [overviewWindowOpen]);
+
+      const onTopScroll = () => {
+        if (!topScrollRef.current || !mainScrollRef.current) return;
+        if (syncLock.current) return;
+        syncLock.current = true;
+        mainScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+        requestAnimationFrame(() => { syncLock.current = false; });
+      };
+
+      const onMainScroll = () => {
+        if (!topScrollRef.current || !mainScrollRef.current) return;
+        if (syncLock.current) return;
+        syncLock.current = true;
+        topScrollRef.current.scrollLeft = mainScrollRef.current.scrollLeft;
+        requestAnimationFrame(() => { syncLock.current = false; });
+      };
+
+      const filterActive = filterWeekdays.length > 0 || filterDateKeys.length > 0;
+
+      const escapeHtml = (v) => String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+      const buildOverviewWindowHTML = () => {
+        const dayHeaders = displayDays.map(d => {
+          const weekend = d.isWeekend;
+          const bg = weekend ? '#fef2f2' : '#ecfdf5';
+          const color = weekend ? '#dc2626' : '#065f46';
+          const label = d.inCurrentMonth ? `${d.date}` : `${d.month + 1}/${d.date}`;
+          return `
+            <th style="min-width:56px;border:1px solid #cfe9df;background:${bg};color:${color};padding:4px;text-align:center;">
+              <div style="font-size:11px;font-weight:700;">${label}</div>
+              <div style="font-size:10px;">${DAY_NAMES[d.dayOfWeek]}</div>
+              ${d.isCustomHoliday ? '<div style="font-size:10px;margin-top:2px;background:#fecdd3;color:#9f1239;border-radius:4px;padding:0 4px;display:inline-block;">國定</div>' : ''}
+            </th>
+          `;
+        }).join('');
+
+        const rows = staffList.map(staff => {
+          const leftCell = `
+            <td style="position:sticky;left:0;z-index:3;background:#fff;border:1px solid #cfe9df;padding:4px;min-width:92px;text-align:center;">
+              <div style="font-size:10px;color:#10b981;">${escapeHtml(formatStaffId(staff.id))}</div>
+              <div style="font-size:13px;font-weight:800;letter-spacing:0.4px;">${escapeHtml(staff.name)}</div>
+              ${staff.isSupport ? '<div style="font-size:10px;color:#2563eb;">(支援)</div>' : ''}
+            </td>
+          `;
+
+          const dayCells = displayDays.map(d => {
+            const cell = getCell(schedule, d, staff.id) || { shift: '', call: '' };
+            const key = shiftMap[cell.shift]?.colorKey || 'gray';
+            const c = OVERVIEW_COLOR[key] || OVERVIEW_COLOR.gray;
+            const bg = cell.shift ? c.bg : (d.inCurrentMonth ? '#ffffff' : '#f8fafc');
+            const text = c.text;
+            const streak = checkSevenDayStreak(staff.id, d, schedule);
+
+            return `
+              <td style="border:${streak ? '2px solid #ef4444' : '1px solid #cfe9df'};background:${bg};padding:2px;text-align:center;height:42px;vertical-align:top;min-width:56px;">
+                ${cell.shift ? `<div style="font-size:12px;font-weight:800;color:${text};line-height:1.1;">${escapeHtml(cell.shift)}</div>` : ''}
+                ${cell.call ? `<div style="margin-top:2px;font-size:9px;background:#ffedd5;color:#9a3412;border-radius:4px;display:inline-block;padding:0 3px;">${escapeHtml(cell.call)}</div>` : ''}
+              </td>
+            `;
+          }).join('');
+
+          return `<tr>${leftCell}${dayCells}</tr>`;
+        }).join('');
+
+        const manpowerRow = displayDays.map(d => {
+          const ds = dailyStats[d.key] || { n: 0, g: 0, a: 0 };
+          const isWeekday = d.dayOfWeek >= 1 && d.dayOfWeek <= 5;
+          const needsValidate = d.inCurrentMonth && isWeekday && !d.isCustomHoliday;
+          const isValid = needsValidate ? (ds.n >= 2 && ds.g >= 2) : true;
+          const color = needsValidate && !isValid ? '#dc2626' : '#065f46';
+          return `
+            <td style="border:1px solid #cfe9df;background:#d1fae5;color:${color};padding:3px;text-align:center;min-width:56px;font-size:10px;font-weight:700;">
+              <div>N:${ds.n}</div><div>G:${ds.g}</div><div>A:${ds.a}</div>
+            </td>
+          `;
+        }).join('');
+
+        return `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MRI 一頁總覽</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #ecfdf5; font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    color: #064e3b; overflow: auto;
+  }
+  .bar {
+    position: sticky; top: 0; z-index: 20; background: #ffffff;
+    border-bottom: 1px solid #cfe9df; padding: 8px 10px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px;
+  }
+  .badge { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 999px; padding: 2px 8px; font-weight: 700; }
+  .wrap { padding: 8px; }
+  .fit-box { transform-origin: top left; }
+  table { border-collapse: collapse; background: #fff; }
+  thead th { position: sticky; top: 0; z-index: 2; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <div><strong>MRI 一頁總覽（右側統計欄已自動隱藏）</strong><span style="margin-left:8px;">${year}年${month + 1}月</span></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="badge">縮放：<span id="ratio">100%</span></span>
+      <button onclick="window.close()" style="border:1px solid #cfe9df;background:#f0fdf4;color:#065f46;border-radius:6px;padding:4px 8px;cursor:pointer;">關閉</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div id="fitBox" class="fit-box">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th style="position:sticky;left:0;z-index:4;background:#ffffff;border:1px solid #cfe9df;padding:4px;min-width:92px;">人員</th>
+            ${dayHeaders}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr>
+            <td style="position:sticky;left:0;z-index:4;background:#d1fae5;border:1px solid #cfe9df;padding:4px;text-align:center;font-size:10px;font-weight:800;">每日人力<br>(N/G/A)</td>
+            ${manpowerRow}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<script>
+(function(){
+  function fit() {
+    var box = document.getElementById('fitBox');
+    var tbl = document.getElementById('tbl');
+    if (!box || !tbl) return;
+    var availW = Math.max(1, window.innerWidth - 20);
+    var availH = Math.max(1, window.innerHeight - 90);
+    var tw = Math.max(1, tbl.scrollWidth);
+    var th = Math.max(1, tbl.scrollHeight);
+    var scale = Math.min(1, availW / tw, availH / th);
+    box.style.transform = 'scale(' + scale + ')';
+    var ratio = document.getElementById('ratio');
+    if (ratio) ratio.textContent = Math.round(scale * 100) + '%';
+    box.style.width = tw + 'px';
+    box.style.height = th + 'px';
+    box.parentElement.style.width = (tw * scale) + 'px';
+    box.parentElement.style.height = (th * scale) + 'px';
+  }
+  window.addEventListener('resize', fit);
+  setTimeout(fit, 30);
+  setTimeout(fit, 180);
+})();
+<\/script>
+</body>
+</html>`;
+      };
+
+      const renderOverviewWindow = () => {
+        const win = overviewWinRef.current;
+        if (!win || win.closed) return;
+        const html = buildOverviewWindowHTML();
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+      };
+
+      const openOverviewWindow = () => {
+        if (overviewWinRef.current && !overviewWinRef.current.closed) {
+          overviewWinRef.current.focus();
+          renderOverviewWindow();
+          setOverviewWindowOpen(true);
+          return;
+        }
+
+        const sw = window.screen?.availWidth || 1400;
+        const sh = window.screen?.availHeight || 900;
+        const w = Math.max(960, sw - 60);
+        const h = Math.max(700, sh - 80);
+        const left = Math.max(0, Math.floor((sw - w) / 2));
+        const top = Math.max(0, Math.floor((sh - h) / 2));
+
+        const newWin = window.open(
+          '',
+          'mri_overview_window',
+          `popup=yes,width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes`
+        );
+
+        if (!newWin) {
+          showNotification('無法開啟新視窗，請允許彈出視窗', 'error');
+          return;
+        }
+
+        overviewWinRef.current = newWin;
+        setOverviewWindowOpen(true);
+        renderOverviewWindow();
+        newWin.focus();
+      };
+
+      const closeOverviewWindow = () => {
+        if (overviewWinRef.current && !overviewWinRef.current.closed) {
+          overviewWinRef.current.close();
+        }
+        overviewWinRef.current = null;
+        setOverviewWindowOpen(false);
+      };
+
+      useEffect(() => {
+        if (overviewWindowOpen) renderOverviewWindow();
+      }, [overviewWindowOpen, displayDays, staffList, schedule, customHolidays, year, month, shiftList]);
+
+      const renderScheduleTable = () => (
+        <table ref={tableRef} className="w-full border-collapse min-w-max">
+          <thead className="sticky top-0 z-20 bg-white shadow-sm">
+            <tr>
+              <th className="sticky left-0 z-30 bg-white border border-emerald-200 p-2 min-w-28">人員</th>
+              {displayDays.map(d => (
+                <th key={d.key} className={`border border-emerald-200 p-1 min-w-16 text-center ${d.isWeekend ? 'bg-red-50 text-red-600' : 'bg-emerald-50'} ${d.inCurrentMonth ? '' : 'opacity-80'}`}>
+                  <div className="text-xs">{d.inCurrentMonth ? d.date : `${d.month + 1}/${d.date}`}</div>
+                  <div className="text-xs font-normal">{DAY_NAMES[d.dayOfWeek]}</div>
+                  {d.isCustomHoliday && <div className="text-xs bg-red-200 text-red-800 rounded px-1 mt-1">國定</div>}
+                </th>
+              ))}
+              <th className="sticky right-0 z-30 bg-white border border-emerald-200 p-2 min-w-52">統計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {staffList.map(staff => (
+              <tr key={staff.id} className="hover:bg-emerald-50">
+                <td className="sticky left-0 z-10 bg-white border border-emerald-200 p-2 font-medium text-center">
+                  <div className="text-emerald-500 text-xs mb-1">{formatStaffId(staff.id)}</div>
+                  <div className="text-lg font-extrabold tracking-wide">{staff.name}</div>
+                  {staff.isSupport && <span className="block text-xs text-blue-500 mt-1">(支援)</span>}
+                </td>
+
+                {displayDays.map(d => {
+                  const cell = getCell(schedule, d, staff.id) || { shift: '', call: '' };
+                  const dayStats = calculateDailyStats(staff.id, d, schedule);
+                  const isSevenDayStreak = checkSevenDayStreak(staff.id, d, schedule);
+                  const isSwapTarget = swapSource && swapSource.day.key === d.key && swapSource.staffId === staff.id;
+
+                  let bgClass = d.inCurrentMonth ? 'bg-white' : 'bg-slate-50';
+                  if (cell.shift && shiftMap[cell.shift]?.cellBg) bgClass = shiftMap[cell.shift].cellBg;
+                  if (isSwapTarget) bgClass = 'bg-indigo-200 ring-2 ring-indigo-500';
+
+                  let borderClass = 'border border-emerald-200';
+                  if (isSevenDayStreak) borderClass = 'border-2 border-red-500 z-10';
+
+                  return (
+                    <td
+                      key={d.key}
+                      className={`${borderClass} p-1 text-center cursor-pointer transition-colors relative h-16 align-top ${bgClass}`}
+                      onClick={() => handleCellClick(d, staff.id)}
+                    >
+                      {cell.shift && (
+                        <div className={`font-bold text-sm ${shiftMap[cell.shift]?.colorClass?.split(' ').slice(1).join(' ') || ''}`}>
+                          {cell.shift}
+                        </div>
+                      )}
+                      {cell.call && (
+                        <div className="text-xs mt-1 bg-orange-100 text-orange-800 rounded px-1 inline-block">
+                          {cell.call}
+                        </div>
+                      )}
+                      <div className="absolute top-0 right-0 flex flex-col items-end p-1">
+                        {isSevenDayStreak && (
+                          <div className="text-red-600 bg-white rounded-full" title="已連續工作7天(含值班)">
+                            <Icons.AlertTriangle className="w-3 h-3" />
+                          </div>
+                        )}
+                      </div>
+                      {dayStats.shiftOvertime > 0 && <div className="text-xs text-red-400 mt-1">+{dayStats.shiftOvertime}h</div>}
+                    </td>
+                  );
+                })}
+
+                <td className="sticky right-0 z-10 bg-white border border-emerald-200 p-2 text-xs">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-lg text-red-600">{stats[staff.id]?.monthlyShiftOvertime}h</span>
+                    <span className="text-emerald-600 text-xs">班別加班總時數</span>
+                    <div className="text-emerald-700 mt-1 flex flex-wrap gap-2">
+                      {PERSON_SHIFT_COUNT_KEYS.map(code => (
+                        <span key={code}>{code}:{stats[staff.id]?.shiftCountMap?.[code] ?? 0}</span>
+                      ))}
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {CALL_COUNT_KEYS.map(k => {
+                        const c = stats[staff.id]?.callCounts?.[k] || 0;
+                        if (c <= 0) return null;
+                        return (
+                          <span key={k} className="px-1 py-0.5 rounded bg-orange-100 text-orange-800 text-xs">
+                            {k}:{c}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ))}
+
+            <tr className="bg-emerald-100 font-bold text-xs">
+              <td className="sticky left-0 z-10 bg-emerald-100 border border-emerald-200 p-2 text-center">
+                每日人力<br/><span className="text-xs font-normal text-emerald-700">(僅 N/G/A，含支援)</span>
+              </td>
+              {displayDays.map(d => {
+                const ds = dailyStats[d.key] || { n: 0, g: 0, a: 0 };
+                const isWeekday = d.dayOfWeek >= 1 && d.dayOfWeek <= 5;
+                const needsValidate = d.inCurrentMonth && isWeekday && !d.isCustomHoliday;
+                const isValid = needsValidate ? (ds.n >= 2 && ds.g >= 2) : true;
+
+                return (
+                  <td key={d.key} className={`border border-emerald-200 p-1 text-center ${needsValidate && !isValid ? 'text-red-600' : 'text-emerald-700'}`}>
+                    <div>N:{ds.n}</div>
+                    <div>G:{ds.g}</div>
+                    <div>A:{ds.a}</div>
+                  </td>
+                );
+              })}
+              <td className="sticky right-0 z-10 bg-emerald-100 border border-emerald-200"></td>
+            </tr>
+          </tbody>
+        </table>
+      );
+
+      const syncStatusClass =
+        syncState === 'syncing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+        syncState === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+        syncState === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+        dirty ? 'bg-amber-50 text-amber-700 border-amber-200' :
+        'bg-gray-50 text-gray-700 border-gray-200';
+
+      return (
+        <div className="flex flex-col h-screen bg-emerald-50 text-sm font-sans relative">
+
+          {notification && (
+            <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded shadow-lg flex items-center gap-2 toast-enter ${notification.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+              {notification.type === 'success' ? <Icons.CheckCircle className="w-5 h-5" /> : <Icons.XCircle className="w-5 h-5" />}
+              <span>{notification.message}</span>
+            </div>
+          )}
+
+          {autoGenConfirmOpen && (
+            <div className="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-5">
+                <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-amber-700">
+                  <Icons.AlertTriangle className="w-5 h-5" />
+                  自動排班前提醒
+                </h3>
+                <p className="text-sm text-emerald-900 leading-relaxed">
+                  目前當月班表為空白。<br />
+                  請先確認 <span className="font-semibold">人員管理</span> 與 <span className="font-semibold">國定假日設定</span> 是否正確，再開始自動排班。
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button className="px-3 py-2 rounded border border-emerald-300 text-emerald-700" onClick={() => setAutoGenConfirmOpen(false)}>
+                    取消
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                    onClick={() => {
+                      setAutoGenConfirmOpen(false);
+                      generateAutoShifts();
+                    }}
+                  >
+                    已確認
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {holidayPanelOpen && (
+            <div className="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-5xl p-5 max-h-screen overflow-auto">
+                <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-pink-700">
+                  <Icons.Calendar className="w-5 h-5" />
+                  國定假日月份面板（{year}年{month + 1}月）
+                </h3>
+
+                <div className="mb-4 text-xs text-emerald-700">
+                  月曆模式（星期一為第一天）。可一次勾選多個日期，按「套用」後更新本月份設定。
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {MONDAY_FIRST_DAY_NAMES.map((n) => (
+                    <div key={n} className="text-center text-xs font-semibold py-2 bg-emerald-50 border border-emerald-200 rounded">
+                      週{n}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 mb-4">
+                  {holidayCalendarCells.map((d, idx) => {
+                    if (!d) return <div key={`blank-${idx}`} className="h-20 bg-gray-50 border border-gray-100 rounded"></div>;
+                    const checked = holidayDraftKeys.includes(d.key);
+                    const weekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
+                    return (
+                      <label
+                        key={d.key}
+                        className={`h-20 p-2 rounded border cursor-pointer flex flex-col justify-between ${
+                          checked ? 'bg-pink-100 border-pink-400' : weekend ? 'bg-red-50 border-red-200' : 'bg-white border-emerald-200'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{d.date}</span>
+                        <span className="text-xs">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) setHolidayDraftKeys(prev => [...prev, d.key]);
+                              else setHolidayDraftKeys(prev => prev.filter(k => k !== d.key));
+                            }}
+                          /> 國定
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button className="px-3 py-2 rounded border border-red-300 bg-red-50 text-red-700" onClick={() => setHolidayDraftKeys([])}>
+                    全清空
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button className="px-3 py-2 rounded border border-emerald-300" onClick={() => setHolidayPanelOpen(false)}>取消</button>
+                  <button className="px-3 py-2 rounded bg-pink-600 text-white hover:bg-pink-700" onClick={applyHolidayPanel}>套用</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {filterModalOpen && (
+            <div className="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl p-5 max-h-screen overflow-auto">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-emerald-800">
+                  <Icons.Filter className="w-5 h-5" /> 顯示篩選（星期 / 日期）
+                </h3>
+
+                <div className="mb-4">
+                  <div className="font-semibold mb-2">星期選擇</div>
+                  <div className="flex flex-wrap gap-2">
+                    {DAY_NAMES.map((name, idx) => (
+                      <label key={idx} className={`px-3 py-1 rounded border cursor-pointer ${filterWeekdays.includes(idx) ? 'bg-emerald-100 border-emerald-400' : 'bg-white border-emerald-200'}`}>
+                        <input
+                          type="checkbox"
+                          className="mr-1"
+                          checked={filterWeekdays.includes(idx)}
+                          onChange={(e) => {
+                            if (e.target.checked) setFilterWeekdays(prev => [...prev, idx]);
+                            else setFilterWeekdays(prev => prev.filter(v => v !== idx));
+                          }}
+                        />
+                        週{name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-4">
+                  <div className="font-semibold mb-2">日期選擇</div>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {days.map(d => (
+                      <label key={d.key} className={`px-2 py-1 rounded border cursor-pointer text-xs ${filterDateKeys.includes(d.key) ? 'bg-emerald-100 border-emerald-400' : 'bg-white border-emerald-200'}`}>
+                        <input
+                          type="checkbox"
+                          className="mr-1"
+                          checked={filterDateKeys.includes(d.key)}
+                          onChange={(e) => {
+                            if (e.target.checked) setFilterDateKeys(prev => [...prev, d.key]);
+                            else setFilterDateKeys(prev => prev.filter(k => k !== d.key));
+                          }}
+                        />
+                        {d.inCurrentMonth ? `${d.date}(${DAY_NAMES[d.dayOfWeek]})` : `${d.month + 1}/${d.date}(${DAY_NAMES[d.dayOfWeek]})`}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <button
+                    className="px-3 py-2 rounded border bg-emerald-50 border-emerald-200"
+                    onClick={() => {
+                      setFilterWeekdays([]);
+                      setFilterDateKeys([]);
+                    }}
+                  >
+                    清除全部勾選（恢復全顯示）
+                  </button>
+                  <div className="flex gap-2">
+                    <button className="px-3 py-2 rounded border border-emerald-300" onClick={() => setFilterModalOpen(false)}>關閉</button>
+                    <button
+                      className="px-3 py-2 rounded bg-emerald-600 text-white"
+                      onClick={() => {
+                        setFilterModalOpen(false);
+                        showNotification(filterActive ? '已更新篩選' : '目前為全顯示', 'success');
+                      }}
+                    >
+                      套用
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white border-b border-emerald-200 p-4 shadow-sm flex flex-col gap-4">
+            <div className="flex flex-wrap justify-between items-center gap-4">
+              <div className="flex items-center gap-4">
+                <h1 className="text-2xl font-bold text-emerald-800 flex items-center gap-2">
+                  <Icons.Calendar className="w-6 h-6" />
+                  MRI排班系統
+                  <span className="text-sm font-semibold px-2 py-1 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                    {appVersion}
+                  </span>
+                </h1>
+
+                <div className={`px-3 py-2 rounded border text-xs ${syncStatusClass}`}>
+                  <div className="font-semibold">同步狀態：{syncText}</div>
+                  <div className="opacity-80 mt-0.5">
+                    {lastSyncTime ? `最近同步：${lastSyncTime}` : '最近同步：尚未同步'}
+                    {dirty ? ' ｜ 本機有未同步變更' : ''}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-emerald-50 p-1 rounded border border-emerald-200">
+                  <button
+                    className={`px-3 py-1 rounded ${activeTab === 'schedule' ? 'bg-white shadow font-semibold text-emerald-700' : ''}`}
+                    onClick={() => setActiveTab('schedule')}
+                  >
+                    排班表
+                  </button>
+                  <button
+                    className={`px-3 py-1 rounded flex items-center gap-1 ${activeTab === 'staff' ? 'bg-white shadow font-semibold text-emerald-700' : ''}`}
+                    onClick={() => setActiveTab('staff')}
+                  >
+                    <Icons.Users className="w-4 h-4" />
+                    人員管理
+                  </button>
+                  <button
+                    className={`px-3 py-1 rounded flex items-center gap-1 ${activeTab === 'shift' ? 'bg-white shadow font-semibold text-emerald-700' : ''}`}
+                    onClick={() => setActiveTab('shift')}
+                  >
+                    <Icons.Settings className="w-4 h-4" />
+                    班別管理
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 bg-emerald-50 p-1 rounded border border-emerald-200">
+                  <select value={year} onChange={(e) => setCurrentDate(new Date(parseInt(e.target.value), month, 1))} className="bg-transparent font-bold p-1 outline-none">
+                    {[year-1, year, year+1].map(y => <option key={y} value={y}>{y}年</option>)}
+                  </select>
+                  <select value={month} onChange={(e) => setCurrentDate(new Date(year, parseInt(e.target.value), 1))} className="bg-transparent font-bold p-1 outline-none">
+                    {Array.from({length: 12}, (_, i) => <option key={i} value={i}>{i + 1}月</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <input type="file" accept=".json" ref={fileInputRef} className="hidden" onChange={importJSON} />
+                <button onClick={() => fileInputRef.current.click()} className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded">
+                  <Icons.Upload className="w-4 h-4" /> 匯入
+                </button>
+                <button onClick={exportJSON} className="flex items-center gap-1 px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded">
+                  <Icons.Download className="w-4 h-4" /> 匯出
+                </button>
+
+                <button onClick={() => syncToCloud(false)} className="flex items-center gap-1 px-3 py-2 bg-sky-600 text-white hover:bg-sky-700 rounded">
+                  <Icons.Upload className="w-4 h-4" /> 強制同步
+                </button>
+                <button onClick={loadFromCloud} className="flex items-center gap-1 px-3 py-2 bg-violet-600 text-white hover:bg-violet-700 rounded">
+                  <Icons.Download className="w-4 h-4" /> 雲端讀取
+                </button>
+
+                <div className="w-px h-8 bg-emerald-300 mx-2"></div>
+
+                <button onClick={requestUndo} disabled={history.length === 0} className="flex items-center gap-1 px-3 py-2 bg-emerald-100 hover:bg-emerald-200 rounded disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-200">
+                  <Icons.RotateCcw className="w-4 h-4" /> 復原 ({history.length})
+                </button>
+                <button onClick={requestRedo} disabled={redoHistory.length === 0} className="flex items-center gap-1 px-3 py-2 bg-indigo-100 hover:bg-indigo-200 rounded disabled:opacity-50 disabled:cursor-not-allowed border border-indigo-200">
+                  <Icons.Redo className="w-4 h-4" /> 取消復原 ({redoHistory.length})
+                </button>
+
+                {activeTab === 'schedule' && (
+                  <>
+                    <button onClick={handleAutoGenerateRequest} className="flex items-center gap-1 px-3 py-2 bg-teal-600 text-white hover:bg-teal-700 rounded">
+                      <Icons.Clock className="w-4 h-4" /> 自動排班別
+                    </button>
+                    <button onClick={openHolidayPanel} className="flex items-center gap-1 px-3 py-2 bg-pink-600 text-white hover:bg-pink-700 rounded">
+                      <Icons.Calendar className="w-4 h-4" /> 國定假日面板
+                    </button>
+                    <button onClick={exportCSV} className="flex items-center gap-1 px-3 py-2 bg-lime-600 text-white hover:bg-lime-700 rounded">
+                      <Icons.FileSpreadsheet className="w-4 h-4" /> 匯出 Excel
+                    </button>
+                    <button onClick={() => setFilterModalOpen(true)} className={`flex items-center gap-1 px-3 py-2 rounded ${filterActive ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}>
+                      {filterActive ? <Icons.EyeOff className="w-4 h-4" /> : <Icons.Filter className="w-4 h-4" />}
+                      顯示篩選
+                    </button>
+                    <button
+                      onClick={() => overviewWindowOpen ? closeOverviewWindow() : openOverviewWindow()}
+                      className={`flex items-center gap-1 px-3 py-2 rounded ${overviewWindowOpen ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-indigo-100 text-indigo-800 hover:bg-indigo-200'}`}
+                    >
+                      {overviewWindowOpen ? <Icons.Maximize className="w-4 h-4" /> : <Icons.Minimize className="w-4 h-4" />}
+                      {overviewWindowOpen ? '關閉總覽視窗' : '一頁總覽縮小'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {activeTab === 'schedule' && (
+              <div className="flex flex-wrap gap-4 items-center p-2 bg-emerald-50 rounded border border-emerald-200">
+                <span className="font-semibold text-emerald-700">工具:</span>
+
+                <div className="flex flex-wrap gap-1 border-r border-emerald-200 pr-4">
+                  {editableShiftTools.map(code => {
+                    const s = shiftMap[code];
+                    if (!s) return null;
+                    return (
+                      <button key={code} onClick={() => { setSelectedTool(code); setSwapSource(null); }} className={`px-3 py-1 rounded border ${selectedTool === code ? 'ring-2 ring-offset-1 ring-emerald-500 font-bold' : ''} ${s.colorClass}`}>
+                        {code}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap gap-1 border-r border-emerald-200 pr-4">
+                  {CALL_TYPES.map(type => (
+                    <button
+                      key={type.code}
+                      onClick={() => { setSelectedTool(type.code); setSwapSource(null); }}
+                      className={`px-3 py-1 rounded border bg-orange-50 text-orange-800 border-orange-200 ${selectedTool === type.code ? 'ring-2 ring-offset-1 ring-orange-500 font-bold' : ''}`}
+                    >
+                      {type.code}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { setSelectedTool('CLEAR_CALL'); setSwapSource(null); }}
+                    className={`px-3 py-1 rounded border bg-red-50 text-red-800 border-red-200 ${selectedTool === 'CLEAR_CALL' ? 'ring-2 ring-offset-1 ring-red-500 font-bold' : ''}`}
+                  >
+                    清除值班
+                  </button>
+                </div>
+
+                <button onClick={() => { setSelectedTool('SWAP'); setSwapSource(null); }} className={`flex items-center gap-1 px-3 py-1 rounded border bg-indigo-50 text-indigo-800 border-indigo-200 ${selectedTool === 'SWAP' ? 'ring-2 ring-offset-1 ring-indigo-500 font-bold' : ''}`}>
+                  <Icons.ArrowLeftRight className="w-4 h-4" /> 對調
+                </button>
+
+                <div className="ml-auto text-emerald-700 text-xs">
+                  當前模式:
+                  <span className="font-bold text-emerald-900 ml-1">
+                    {selectedTool === 'SWAP'
+                      ? '對調班別'
+                      : CALL_COUNT_KEYS.includes(selectedTool)
+                      ? `填入值班 ${selectedTool}`
+                      : selectedTool === 'CLEAR_CALL'
+                      ? '清除值班'
+                      : `填入 ${selectedTool}`
+                    }
+                  </span>
+                  {filterActive && <span className="ml-2 text-amber-700 font-semibold">（篩選顯示中）</span>}
+                  {overviewWindowOpen && <span className="ml-2 text-indigo-700 font-semibold">（總覽新視窗開啟中：右側統計欄已隱藏）</span>}
+                  {lastUndoDesc && <span className="ml-2 text-teal-700 font-semibold">｜{lastUndoDesc}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {activeTab === 'staff' && (
+            <div className="p-4 overflow-auto">
+              <div className="bg-white rounded border border-emerald-200 p-4 max-w-7xl">
+                <h2 className="text-lg font-bold mb-3 flex items-center gap-2 text-emerald-800">
+                  <Icons.Users className="w-5 h-5" />
+                  人員管理
+                </h2>
+
+                <div className="flex gap-2 mb-4">
+                  <input
+                    className="border border-emerald-300 rounded px-3 py-2 flex-1"
+                    placeholder="輸入新增人員姓名"
+                    value={newStaffName}
+                    onChange={(e) => setNewStaffName(e.target.value)}
+                  />
+                  <button onClick={addStaff} className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">
+                    新增人員
+                  </button>
+                </div>
+
+                <div className="text-xs text-emerald-700 mb-3">
+                  每位人員固定 1 列顯示，可拖曳排序、修改編號、設定加班優先與 G 班資格。
+                </div>
+
+                <div className="overflow-auto border border-emerald-200 rounded" style={{ maxHeight: '70vh' }}>
+                  <table className="min-w-max w-full border-collapse">
+                    <thead className="bg-emerald-50">
+                      <tr>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-14">拖曳</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-28">編號</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center">姓名</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-32">優先加班</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-32">安排 G 班</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">身分</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staffList.map((s) => (
+                        <tr
+                          key={s.id}
+                          draggable
+                          onDragStart={() => setDragStaffId(s.id)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            reorderStaff(dragStaffId, s.id);
+                            setDragStaffId(null);
+                          }}
+                          onDragEnd={() => setDragStaffId(null)}
+                          className={`${dragStaffId === s.id ? 'opacity-70' : ''} bg-white hover:bg-emerald-50`}
+                        >
+                          <td className="border border-emerald-200 p-2 text-center cursor-move select-none">↕</td>
+
+                          <td className="border border-emerald-200 p-2">
+                            <input
+                              className="w-full h-9 border border-emerald-300 rounded px-2 font-mono text-center"
+                              defaultValue={formatStaffId(s.id)}
+                              onBlur={(e) => {
+                                const raw = e.target.value.trim();
+                                const normalized = normalizeStaffId(raw);
+                                if (!normalized || normalized === s.id) {
+                                  e.target.value = s.id;
+                                  return;
+                                }
+                                changeStaffId(s.id, normalized);
+                              }}
+                            />
+                          </td>
+
+                          <td className="border border-emerald-200 p-2">
+                            <input
+                              className="w-full h-9 border border-emerald-300 rounded px-2"
+                              defaultValue={s.name}
+                              onBlur={(e) => {
+                                const name = e.target.value.trim();
+                                if (!name) {
+                                  e.target.value = s.name;
+                                  return;
+                                }
+                                if (name !== s.name) renameStaff(s.id, name);
+                              }}
+                            />
+                          </td>
+
+                          <td className="border border-emerald-200 p-2 text-center">
+                            <label className={`inline-flex items-center gap-2 px-2 py-1 rounded border ${s.isSupport ? 'bg-gray-100 text-gray-500 border-gray-300' : 'bg-white border-emerald-300 text-emerald-800'}`}>
+                              <input type="checkbox" checked={!!s.preferExtra} disabled={s.isSupport} onChange={() => togglePreferExtra(s.id)} />
+                              <span className="text-xs">啟用</span>
+                            </label>
+                          </td>
+
+                          <td className="border border-emerald-200 p-2 text-center">
+                            <label className={`inline-flex items-center gap-2 px-2 py-1 rounded border ${s.isSupport ? 'bg-gray-100 text-gray-500 border-gray-300' : 'bg-white border-emerald-300 text-emerald-800'}`}>
+                              <input type="checkbox" checked={!!s.allowG} disabled={s.isSupport} onChange={() => toggleAllowG(s.id)} />
+                              <span className="text-xs">啟用</span>
+                            </label>
+                          </td>
+
+                          <td className="border border-emerald-200 p-2 text-center">
+                            {s.isSupport
+                              ? <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">支援</span>
+                              : <span className="text-xs text-emerald-700">一般</span>
+                            }
+                          </td>
+
+                          <td className="border border-emerald-200 p-2 text-center">
+                            <button className="h-9 px-3 rounded w-full bg-red-100 text-red-700 hover:bg-red-200" onClick={() => removeStaff(s.id)}>
+                              刪除
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'shift' && (
+            <div className="p-4 overflow-auto">
+              <div className="bg-white rounded border border-emerald-200 p-4 max-w-7xl">
+                <h2 className="text-lg font-bold mb-3 flex items-center gap-2 text-emerald-800">
+                  <Icons.Settings className="w-5 h-5" />
+                  班別管理
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-4">
+                  <input className="border border-emerald-300 rounded px-3 py-2" placeholder="班別代碼(如 X)" value={newShiftCode} onChange={(e) => setNewShiftCode(e.target.value)} />
+                  <input className="border border-emerald-300 rounded px-3 py-2 md:col-span-2" placeholder="班別名稱" value={newShiftLabel} onChange={(e) => setNewShiftLabel(e.target.value)} />
+                  <input className="border border-emerald-300 rounded px-3 py-2" placeholder="時段" value={newShiftTime} onChange={(e) => setNewShiftTime(e.target.value)} />
+                  <input className="border border-emerald-300 rounded px-3 py-2" placeholder="加班時數" value={newShiftOt} onChange={(e) => setNewShiftOt(e.target.value)} />
+                  <select className="border border-emerald-300 rounded px-3 py-2" value={newShiftColorKey} onChange={(e) => setNewShiftColorKey(e.target.value)}>
+                    {SHIFT_COLOR_OPTIONS.map(c => <option key={c.key} value={c.key}>{c.key}</option>)}
+                  </select>
+                </div>
+
+                <div className="mb-4">
+                  <button onClick={addShift} className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">新增班別</button>
+                </div>
+
+                <div className="text-xs text-emerald-700 mb-3">
+                  每種班別固定 1 列顯示，可拖曳排序、編輯內容、刪除。系統班別（B/G/N/國/OFF/OFF*）不可刪除或改代碼。
+                </div>
+
+                <div className="overflow-auto border border-emerald-200 rounded" style={{ maxHeight: '70vh' }}>
+                  <table className="min-w-max w-full border-collapse">
+                    <thead className="bg-emerald-50">
+                      <tr>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-14">拖曳</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">代碼</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center">名稱</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-44">時段</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-28">加班時數</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-28">色彩</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">預覽</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">狀態</th>
+                        <th className="sticky top-0 z-20 bg-emerald-50 border border-emerald-200 p-2 text-center w-24">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shiftList.map(s => {
+                        const color = SHIFT_COLOR_OPTIONS.find(c => c.key === s.colorKey) || SHIFT_COLOR_OPTIONS[0];
+                        return (
+                          <tr
+                            key={s.code}
+                            draggable
+                            onDragStart={() => setDragShiftCode(s.code)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              reorderShift(dragShiftCode, s.code);
+                              setDragShiftCode(null);
+                            }}
+                            onDragEnd={() => setDragShiftCode(null)}
+                            className={`${dragShiftCode === s.code ? 'opacity-70' : ''} bg-white hover:bg-emerald-50`}
+                          >
+                            <td className="border border-emerald-200 p-2 text-center cursor-move select-none">↕</td>
+
+                            <td className="border border-emerald-200 p-2">
+                              <input
+                                className={`w-full h-9 border border-emerald-300 rounded px-2 font-mono text-center ${s.locked ? 'bg-gray-100 text-gray-500' : ''}`}
+                                defaultValue={s.code}
+                                disabled={s.locked}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim();
+                                  if (!v || v === s.code) {
+                                    e.target.value = s.code;
+                                    return;
+                                  }
+                                  changeShiftCode(s.code, v);
+                                }}
+                              />
+                            </td>
+
+                            <td className="border border-emerald-200 p-2">
+                              <input
+                                className="w-full h-9 border border-emerald-300 rounded px-2"
+                                defaultValue={s.label}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim();
+                                  if (!v || v === s.label) {
+                                    e.target.value = s.label;
+                                    return;
+                                  }
+                                  updateShiftField(s.code, { label: v });
+                                }}
+                              />
+                            </td>
+
+                            <td className="border border-emerald-200 p-2">
+                              <input
+                                className="w-full h-9 border border-emerald-300 rounded px-2"
+                                defaultValue={s.time}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim() || '-';
+                                  if (v === s.time) return;
+                                  updateShiftField(s.code, { time: v });
+                                }}
+                              />
+                            </td>
+
+                            <td className="border border-emerald-200 p-2">
+                              <input
+                                className="w-full h-9 border border-emerald-300 rounded px-2 text-center"
+                                defaultValue={String(s.overtime)}
+                                onBlur={(e) => {
+                                  const n = Number(e.target.value);
+                                  if (Number.isNaN(n)) {
+                                    e.target.value = String(s.overtime);
+                                    showNotification('加班時數需為數字', 'error');
+                                    return;
+                                  }
+                                  if (n !== s.overtime) updateShiftField(s.code, { overtime: n });
+                                }}
+                              />
+                            </td>
+
+                            <td className="border border-emerald-200 p-2">
+                              <select
+                                className="w-full h-9 border border-emerald-300 rounded px-2"
+                                value={s.colorKey}
+                                onChange={(e) => updateShiftField(s.code, { colorKey: e.target.value })}
+                              >
+                                {SHIFT_COLOR_OPTIONS.map(c => <option key={c.key} value={c.key}>{c.key}</option>)}
+                              </select>
+                            </td>
+
+                            <td className="border border-emerald-200 p-2 text-center">
+                              <span className={`inline-block px-2 py-1 rounded text-xs border ${color.className}`}>
+                                {s.code}
+                              </span>
+                            </td>
+
+                            <td className="border border-emerald-200 p-2 text-center">
+                              {s.locked ? <span className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700">系統</span> : <span className="text-xs text-emerald-700">自訂</span>}
+                            </td>
+
+                            <td className="border border-emerald-200 p-2 text-center">
+                              <button
+                                className={`h-9 px-3 rounded w-full ${s.locked ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                disabled={s.locked}
+                                onClick={() => deleteShift(s.code)}
+                              >
+                                刪除
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'schedule' && (
+            <>
+              <div className="bg-white border-b border-emerald-200 px-2 py-1">
+                <div ref={topScrollRef} onScroll={onTopScroll} className="overflow-x-auto overflow-y-hidden h-4">
+                  <div style={{ width: tableWidth, height: '1px' }}></div>
+                </div>
+              </div>
+
+              <div ref={mainScrollRef} onScroll={onMainScroll} className="flex-1 overflow-auto relative">
+                {renderScheduleTable()}
+              </div>
+
+              <div className="bg-white border-t border-emerald-200 p-2 text-xs text-emerald-700 flex justify-between">
+                <div>
+                  規則: 平日需 2N, 2G (B班不限)。N班加班4h, G班加班0.5h, A班加班0.5h, C班加班4h。<br/>
+                  <span className="text-red-500 font-bold">紅色邊框代表連續工作7天（包含值班）。</span>
+                </div>
+                <div>統計格式: 個人班別統計顯示 N/G/A/國/OFF/OFF*</div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
